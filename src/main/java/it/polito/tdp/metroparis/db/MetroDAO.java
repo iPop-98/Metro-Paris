@@ -8,11 +8,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.checkerframework.checker.nullness.qual.RequiresNonNull;
+
 import com.javadocmd.simplelatlng.LatLng;
 
 import it.polito.tdp.metroparis.model.Connessione;
 import it.polito.tdp.metroparis.model.Fermata;
 import it.polito.tdp.metroparis.model.Linea;
+import it.polito.tdp.metroparis.model.coppieF;
 
 public class MetroDAO {
 
@@ -100,9 +103,106 @@ public class MetroDAO {
 		}
 	}
 
-	public List<Fermata> trovaCollegate(Fermata partenza, Map<Integer, Fermata> fermateIdMap) {
+	public List<Fermata> trovaCollegate(Fermata partenza) {
+		String sql = "SELECT * "
+				+ "FROM fermata "
+				+ "WHERE id_fermata IN ( "
+				+ "SELECT id_stazA "
+				+ "FROM connessione "
+				+ "WHERE id_stazP = ? "
+				+ "GROUP BY id_stazA) "
+				+ "ORDER BY nome ASC ";
 		
+		List<Fermata> fermate = new ArrayList<>();
+		
+		try {
+			Connection conn = DBConnect.getConnection() ;
+			
+			PreparedStatement st = conn.prepareStatement(sql) ;
+			st.setInt(1, partenza.getIdFermata());
+			
+			ResultSet res = st.executeQuery() ;
+			
+			while(res.next()) {
+				Fermata f = new Fermata(res.getInt("id_fermata"), res.getString("nome"),
+						new LatLng(res.getDouble("coordX"), res.getDouble("coordY")));
+				fermate.add(f);
+			}
+			
+			st.close();
+			conn.close();
+			
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			return null;
+		} 
+
+		return fermate;
 	}
+	
+	public List<Fermata> trovaIdCollegate(Fermata partenza, Map<Integer, Fermata> fermateIdMap ) {
+		String sql = "SELECT id_stazA "
+				+ "FROM connessione "
+				+ "WHERE id_stazP = ? "
+				+ "GROUP BY id_stazA ";
+		
+		List<Fermata> fermate = new ArrayList<>();
+		
+		try {
+			Connection conn = DBConnect.getConnection() ;
+			
+			PreparedStatement st = conn.prepareStatement(sql) ;
+			st.setInt(1, partenza.getIdFermata());
+			
+			ResultSet res = st.executeQuery() ;
+			
+			while(res.next()) {				
+				Integer idFermata = res.getInt("id_stazA");
+				fermate.add(fermateIdMap.get(idFermata));
+			}
+			
+			st.close();
+			conn.close();
+			
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			return null;
+		} 
+
+		return fermate;
+	}
+	
+	public List<coppieF> getAllCoppie (Map<Integer, Fermata> fermateIdMap){
+		String sql = "SELECT distinct id_stazP, id_stazA "
+				+ "	FROM connessione";
+		
+		List<coppieF> allCoppie = new ArrayList<>();
+		try {
+			Connection conn = DBConnect.getConnection() ;
+			
+			PreparedStatement st = conn.prepareStatement(sql) ;
+			
+			ResultSet res = st.executeQuery() ;
+			
+			while(res.next()) {		
+				coppieF coppia = new coppieF(fermateIdMap.get(res.getInt("id_stazP")), 
+						fermateIdMap.get(res.getInt("id_stazA")));
+				allCoppie.add(coppia);
+			}
+			
+			st.close();
+			conn.close();
+			
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			return null;
+		} 
+		return allCoppie;
+	}
+	
 
 	
 
