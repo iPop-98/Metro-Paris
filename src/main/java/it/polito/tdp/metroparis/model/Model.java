@@ -6,23 +6,29 @@ import java.util.List;
 import java.util.Map;
 
 import org.jgrapht.Graph;
+import org.jgrapht.GraphPath;
 import org.jgrapht.Graphs;
-import org.jgrapht.graph.DefaultEdge;
+import org.jgrapht.alg.shortestpath.DijkstraShortestPath;
+import org.jgrapht.graph.DefaultWeightedEdge;
 import org.jgrapht.graph.SimpleGraph;
+import org.jgrapht.graph.SimpleWeightedGraph;
 import org.jgrapht.traverse.BreadthFirstIterator;
+
+import com.javadocmd.simplelatlng.LatLngTool;
+import com.javadocmd.simplelatlng.util.LengthUnit;
 
 import it.polito.tdp.metroparis.db.MetroDAO;
 
 public class Model {
 	
-	private Graph<Fermata, DefaultEdge> grafo ;
+	private Graph<Fermata, DefaultWeightedEdge> grafo ;
 	private List<Fermata> fermate ;
 	private Map<Integer, Fermata> fermateIdMap ;
 	
 	public void creaGrafo() {
 		
 		// crea l'oggetto grafo
-		this.grafo = new SimpleGraph<Fermata, DefaultEdge>(DefaultEdge.class) ;
+		this.grafo = new SimpleWeightedGraph<Fermata, DefaultWeightedEdge>(DefaultWeightedEdge.class) ;
 		
 		// aggiungi i vertici
 		MetroDAO dao = new MetroDAO() ;
@@ -33,54 +39,22 @@ public class Model {
 			this.fermateIdMap.put(f.getIdFermata(), f) ;
 		
 		Graphs.addAllVertices(this.grafo, this.fermate) ;
-		
-		// aggiungi gli archi
-		
-		// metodo 1: considero tutti i potenziali archi
-//		long tic = System.currentTimeMillis();
-//		for(Fermata partenza: this.grafo.vertexSet()) {
-//			for(Fermata arrivo: this.grafo.vertexSet()) {
-//				if(dao.isConnesse(partenza, arrivo)) {
-//					this.grafo.addEdge(partenza, arrivo) ;
-//				}
-//			}
-//		}
-//		long toc = System.currentTimeMillis();
-//		System.out.println("Elapsed time "+ (toc-tic));
-		
-		// metodo 2: data una fermata, trova la lista di quelle adiacente
-		long tic = System.currentTimeMillis();
-		for(Fermata partenza: this.grafo.vertexSet()) {
-			List<Fermata> collegate = dao.trovaCollegate(partenza) ;
-			
-			for(Fermata arrivo: collegate) {
-				this.grafo.addEdge(partenza, arrivo) ;
-			}
-		}
-		long toc = System.currentTimeMillis();
-		System.out.println("Elapsed time "+ (toc-tic));
-		
-		// metodo 2a: data una fermata, troviamo la lista di id connessi
-		tic = System.currentTimeMillis();
-		for(Fermata partenza: this.grafo.vertexSet()) {
-			List<Fermata> collegate = dao.trovaIdCollegate(partenza, fermateIdMap) ;
-			
-			for(Fermata arrivo: collegate) {
-				this.grafo.addEdge(partenza, arrivo) ;
-			}
-		}
-		toc = System.currentTimeMillis();
-		System.out.println("Elapsed time "+ (toc-tic));
-		
+				
 		// metodo 3: faccio una query per prendermi tutti gli edges 
 		
-		tic = System.currentTimeMillis();
 		List<coppieF> allCoppie = dao.getAllCoppie(fermateIdMap);
-		for (coppieF coppia : allCoppie)
-			this.grafo.addEdge(coppia.getPartenza(), coppia.getArrivo());
+		for (coppieF coppia : allCoppie) {
+//			DefaultWeightedEdge e = this.grafo.addEdge(coppia.getPartenza(), coppia.getArrivo());
+//			if (e!=null)
+//				this.grafo.setEdgeWeight(e, distanza);
+			
+			double distanza = LatLngTool.distance(coppia.getPartenza().getCoords(),
+					coppia.getArrivo().getCoords(), LengthUnit.METER) ;
+			
+			Graphs.addEdge(this.grafo, coppia.getPartenza(), coppia.getArrivo(), distanza) ;
+//			Graphs.addEdge(this.grafo, coppia.getPartenza(), coppia.getArrivo(), 1.0) ;
+		}
 		
-		toc = System.currentTimeMillis();
-		System.out.println("Elapsed time "+ (toc-tic));
 		
 		
 		System.out.println("Grafo creato con "+this.grafo.vertexSet().size() +
@@ -90,32 +64,13 @@ public class Model {
 	
 	/* determina il percorso minimo tra le 2 fermate */
 	public List<Fermata> percorso(Fermata partenza, Fermata arrivo) {
-		// Visita il grafo partendo da 'partenza'
-		BreadthFirstIterator<Fermata, DefaultEdge> visita = 
-				new BreadthFirstIterator<>(this.grafo, partenza) ;
-		List<Fermata> raggiungibili = new ArrayList<Fermata>() ;
+
+		DijkstraShortestPath<Fermata, DefaultWeightedEdge> sp = 
+				new DijkstraShortestPath<>(this.grafo) ;
 		
-		while(visita.hasNext()) {
-			Fermata f = visita.next() ;
-//			raggiungibili.add(f) ;
-		}
-//		System.out.println(raggiungibili) ;
+		GraphPath<Fermata, DefaultWeightedEdge> gp = sp.getPath(partenza, arrivo) ;
 		
-		// Trova il percorso sull'albero di visita
-		List<Fermata> percorso = new ArrayList<Fermata>() ;
-		Fermata corrente = arrivo ;
-		percorso.add(arrivo) ;
-		
-		DefaultEdge e = visita.getSpanningTreeEdge(corrente) ;
-		while(e!=null) {
-			Fermata precedente = Graphs.getOppositeVertex(this.grafo, e, corrente) ;
-			percorso.add(0, precedente) ;
-			corrente = precedente ;
-			
-			e = visita.getSpanningTreeEdge(corrente) ;
-		}
-		
-		return percorso ;
+		return gp.getVertexList() ;
 	}
 	
 	public List<Fermata> getAllFermate(){
